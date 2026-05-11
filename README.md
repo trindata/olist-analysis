@@ -39,7 +39,7 @@ Looker Studio
 
 ## Lineage
 
-> ![Lineage](lineage.png)
+> ![Lineage](lineage_v2.png)
 
 ---
 

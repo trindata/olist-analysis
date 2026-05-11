@@ -39,7 +39,7 @@ Looker Studio
 
 ## Lineage
 
-> _Adicionar screenshot do lineage gerado via `dbt docs generate`_
+> ![Lineage](lineage.png)
 
 ---
 

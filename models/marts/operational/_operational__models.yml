@@ -1,0 +1,52 @@
+version: 2
+
+models:
+
+  - name: fct_orders
+    description: >
+      Tabela fato central do projeto. Granularidade: 1 linha por pedido.
+      Combina orders, customers, reviews e agregados de itens em uma
+      wide table pronta pro Looker. Inclui métricas de tempo de entrega,
+      flags de atraso e satisfação, e dimensões temporais pra análise
+      de cohort e sazonalidade.
+    columns:
+
+      - name: order_id
+        description: "Chave primária do pedido."
+        data_tests:
+          - unique
+          - not_null
+
+      - name: customer_unique_id
+        description: "ID estável do cliente. Base pra análise de recompra."
+        data_tests:
+          - not_null
+
+      - name: order_status
+        description: "Status final do pedido."
+        data_tests:
+          - not_null
+
+      - name: is_late
+        description: >
+          True se delivered_to_customer_at > estimated_delivery_at.
+          Null se pedido não foi entregue.
+
+      - name: delivery_delay_days
+        description: >
+          Dias de atraso (positivo = atrasado, negativo = adiantado).
+          Null em pedidos não entregues.
+
+      - name: review_score
+        description: "Nota de 1 a 5. Null se pedido não gerou avaliação."
+
+      - name: order_revenue
+        description: "Receita de produto do pedido (sem frete)."
+
+      - name: order_gross_value
+        description: "Receita total do pedido (produto + frete)."
+
+      - name: purchase_month
+        description: "Mês da compra truncado (DATE). Eixo temporal pra dashboards."
+        data_tests:
+          - not_null

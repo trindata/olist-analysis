@@ -1,0 +1,76 @@
+version: 2
+
+models:
+
+  - name: mart_category_performance
+    description: >
+      Performance de categorias de produto por mês. Granularidade:
+      1 linha por (category, purchase_year, purchase_month).
+      Inclui receita, volume, satisfação e custo logístico por categoria.
+      Restrito a pedidos delivered.
+    columns:
+
+      - name: category
+        description: "Categoria do produto em inglês."
+        data_tests:
+          - not_null
+
+      - name: purchase_year
+        description: "Ano da compra."
+        data_tests:
+          - not_null
+
+      - name: purchase_month
+        description: "Mês da compra truncado (DATE)."
+        data_tests:
+          - not_null
+
+      - name: total_orders
+        description: "Total de pedidos entregues com itens nessa categoria."
+        data_tests:
+          - not_null
+
+      - name: category_revenue
+        description: "Receita de produto da categoria no período."
+
+      - name: avg_freight_ratio_pct
+        description: >
+          Frete médio como percentual do preço. Correlaciona
+          negativamente com review score.
+
+      - name: avg_review_score
+        description: "Score médio de avaliação dos pedidos da categoria."
+
+  - name: mart_seller_performance
+    description: >
+      Performance de vendedores. Granularidade: 1 linha por seller_id
+      (agregado de todo o período). Inclui receita, SLA de entrega,
+      taxa de atraso e satisfação. Restrito a pedidos delivered.
+      Filtrar por volume mínimo de pedidos pra análises comparativas.
+    columns:
+
+      - name: seller_id
+        description: "Chave primária do vendedor."
+        data_tests:
+          - unique
+          - not_null
+
+      - name: seller_state
+        description: "UF do vendedor."
+
+      - name: total_orders
+        description: "Total de pedidos entregues pelo seller."
+        data_tests:
+          - not_null
+
+      - name: seller_revenue
+        description: "Receita total de produto do seller."
+
+      - name: avg_review_score
+        description: "Score médio de avaliação."
+
+      - name: pct_late_orders
+        description: "Percentual de pedidos entregues com atraso."
+
+      - name: avg_days_to_deliver
+        description: "Prazo médio real de entrega em dias."

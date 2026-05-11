@@ -1,0 +1,465 @@
+version: 2
+
+models:
+
+  # --------------------------------------------------------------------------
+  # Tradução de categorias: lookup pt-BR -> en. PK em category_name_pt.
+  # --------------------------------------------------------------------------
+  - name: stg_olist__category_translation
+    description: >
+      Tradução de categorias de produto de português para inglês.
+      Granularidade: 1 linha por categoria. Lookup pequena (~71 linhas)
+      usada pra enriquecer products na intermediate. Origem:
+      product_category_name_translation.csv do Kaggle.
+    columns:
+
+      - name: category_name_pt
+        description: >
+          Nome da categoria em português. Chave primária. Bate com
+          products.product_category_name (após rename na staging de products).
+        data_tests:
+          - unique
+          - not_null
+
+      - name: category_name_en
+        description: "Nome da categoria em inglês."
+        data_tests:
+          - not_null
+
+  # --------------------------------------------------------------------------
+  # Vendedores: 1 linha por seller_id. Dimensão de performance de vendedor.
+  # --------------------------------------------------------------------------
+  - name: stg_olist__sellers
+    description: >
+      Vendedores do marketplace Olist. Granularidade: 1 linha por seller_id.
+      Nomes de cidade normalizados via initcap+trim, UF em uppercase,
+      zip_code_prefix castado pra string (preserva zeros à esquerda e
+      mantém consistência com outras tabelas).
+    columns:
+
+      - name: seller_id
+        description: "Chave primária do vendedor."
+        data_tests:
+          - unique
+          - not_null
+
+      - name: seller_zip_code_prefix
+        description: >
+          Prefixo do CEP do vendedor (string de 5 dígitos). FK para
+          a versão agregada de geolocation que será criada na staging.
+        data_tests:
+          - not_null
+
+      - name: seller_city
+        description: >
+          Cidade do vendedor, normalizada (initcap + trim).
+
+      - name: seller_state
+        description: >
+          UF do vendedor (sempre maiúscula, 2 caracteres).
+        data_tests:
+          - not_null
+
+  # --------------------------------------------------------------------------
+  # Clientes: granularidade por (pessoa, pedido). Use customer_unique_id
+  # pra identificar pessoa estável ao longo do tempo.
+  # --------------------------------------------------------------------------
+  - name: stg_olist__customers
+    description: >
+      Clientes do Olist. Granularidade: 1 linha por customer_id, ou seja,
+      1 linha por (pessoa, pedido). Para identificar uma pessoa ao longo
+      do tempo (LTV, recompra, cohort), agregar por customer_unique_id.
+      Normalização aplicada: city via initcap+trim, state em uppercase,
+      zip como string pra preservar zeros à esquerda.
+    columns:
+
+      - name: customer_id
+        description: >
+          Chave primária da tabela. NÃO é ID estável da pessoa, é o ID
+          do par (pessoa, pedido). Cada pedido em orders tem um customer_id
+          único que aponta pra cá.
+        data_tests:
+          - unique
+          - not_null
+
+      - name: customer_unique_id
+        description: >
+          ID estável da pessoa. Aparece múltiplas vezes na tabela (uma
+          por compra). Base de qualquer análise de retenção e LTV.
+        data_tests:
+          - not_null
+
+      - name: customer_zip_code_prefix
+        description: >
+          Prefixo do CEP do cliente (string de 5 dígitos). FK para
+          a versão agregada de geolocation.
+        data_tests:
+          - not_null
+
+      - name: customer_city
+        description: "Cidade de residência do cliente, normalizada."
+
+      - name: customer_state
+        description: "UF do cliente (sempre maiúscula, 2 caracteres)."
+        data_tests:
+          - not_null
+
+  # --------------------------------------------------------------------------
+  # Produtos: catálogo. Granularidade: 1 linha por product_id. Typos da raw
+  # corrigidos, volume calculado pra agregação posterior.
+  # --------------------------------------------------------------------------
+  - name: stg_olist__products
+    description: >
+      Catálogo de produtos. Granularidade: 1 linha por product_id.
+      Corrige os typos 'lenght' -> 'length' do dataset original, renomeia
+      category pra explicitar idioma (pt) e adiciona product_volume_cm3
+      como cálculo trivial pra evitar repetição nas camadas posteriores.
+      Categoria fica em pt-BR aqui; tradução pra inglês acontece na
+      intermediate via join com stg_olist__category_translation.
+    columns:
+
+      - name: product_id
+        description: "Chave primária do produto."
+        data_tests:
+          - unique
+          - not_null
+
+      - name: product_category_name_pt
+        description: >
+          Categoria do produto em português. Pode ser null (produtos sem
+          categoria atribuída na raw). FK lógica pra
+          stg_olist__category_translation.category_name_pt.
+
+      - name: product_name_length
+        description: >
+          Número de caracteres no nome do produto. Typo 'lenght' da raw
+          corrigido aqui.
+
+      - name: product_description_length
+        description: >
+          Número de caracteres na descrição do produto. Typo 'lenght' da
+          raw corrigido aqui.
+
+      - name: product_photos_qty
+        description: "Quantidade de fotos do produto no anúncio."
+
+      - name: product_weight_g
+        description: "Peso do produto em gramas."
+
+      - name: product_length_cm
+        description: "Comprimento do produto em centímetros."
+
+      - name: product_height_cm
+        description: "Altura do produto em centímetros."
+
+      - name: product_width_cm
+        description: "Largura do produto em centímetros."
+
+      - name: product_volume_cm3
+        description: >
+          Volume calculado (length * height * width). Null se qualquer
+          dimensão for null. Útil pra modelagem de custo logístico e
+          identificação de produtos volumosos vs compactos.
+
+  # --------------------------------------------------------------------------
+  # Pedidos: tabela central. Granularidade: 1 linha por pedido. Timestamps
+  # castados pra TIMESTAMP, status normalizado em lowercase.
+  # --------------------------------------------------------------------------
+  - name: stg_olist__orders
+    description: >
+      Pedidos da Olist. Granularidade: 1 linha por order_id. Tabela
+      central do projeto: toda análise temporal e de funil parte daqui.
+      Timestamps castados explicitamente de string para TIMESTAMP, com
+      sufixo _at na convenção da staging. Status normalizado em lowercase
+      pra evitar inconsistências de capitalização.
+    columns:
+
+      - name: order_id
+        description: "Chave primária do pedido."
+        data_tests:
+          - unique
+          - not_null
+
+      - name: customer_id
+        description: >
+          FK para stg_olist__customers.customer_id. Único por pedido (ver
+          documentação da tabela customers pra entender a relação com
+          customer_unique_id).
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_olist__customers')
+                field: customer_id
+
+      - name: order_status
+        description: >
+          Status atual do pedido, em lowercase. Valores no dataset:
+          created, approved, invoiced, processing, shipped, delivered,
+          canceled, unavailable. Distribuição concentrada em 'delivered'.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - created
+                  - approved
+                  - invoiced
+                  - processing
+                  - shipped
+                  - delivered
+                  - canceled
+                  - unavailable
+
+      - name: purchased_at
+        description: "Timestamp da compra. Âncora temporal de cohorts."
+        data_tests:
+          - not_null
+
+      - name: approved_at
+        description: >
+          Timestamp da aprovação do pagamento. Null em pedidos que não
+          chegaram a ser aprovados (canceled antes da aprovação).
+
+      - name: delivered_to_carrier_at
+        description: >
+          Timestamp em que o pedido foi entregue à transportadora pelo
+          seller. Null em pedidos não enviados.
+
+      - name: delivered_to_customer_at
+        description: >
+          Timestamp da entrega ao cliente. Null em pedidos não entregues
+          (canceled, em trânsito no fim da janela, etc).
+
+      - name: estimated_delivery_at
+        description: >
+          Data prometida de entrega no momento da compra. Comparar com
+          delivered_to_customer_at pra medir atraso.
+        data_tests:
+          - not_null
+
+  # --------------------------------------------------------------------------
+  # Itens do pedido: granularidade (order_id, order_item_id).
+  # Chave primária composta. Valores monetários como NUMERIC.
+  # --------------------------------------------------------------------------
+  - name: stg_olist__order_items
+    description: >
+      Itens individuais de cada pedido. Granularidade: 1 linha por
+      (order_id, order_item_id). Um pedido pode ter N itens, cada um
+      com seu próprio produto, seller, preço e frete. Valores monetários
+      castados pra NUMERIC pra evitar imprecisão de float em agregações.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - order_id
+              - order_item_id
+    columns:
+
+      - name: order_id
+        description: "FK para stg_olist__orders."
+        data_tests:
+          - not_null
+
+      - name: order_item_id
+        description: >
+          Sequencial do item dentro do pedido (1, 2, 3...). Junto com
+          order_id forma a chave primária composta.
+        data_tests:
+          - not_null
+
+      - name: product_id
+        description: "FK para stg_olist__products."
+        data_tests:
+          - not_null
+
+      - name: seller_id
+        description: "FK para stg_olist__sellers."
+        data_tests:
+          - not_null
+
+      - name: shipping_limit_at
+        description: >
+          Prazo máximo do seller pra postar o item. Comparar com
+          delivered_to_carrier_at em orders pra medir SLA de fulfillment.
+        data_tests:
+          - not_null
+
+      - name: item_price
+        description: >
+          Preço unitário do item em reais (NUMERIC). Receita de produto
+          do pedido = SUM(item_price) GROUP BY order_id.
+        data_tests:
+          - not_null
+
+      - name: item_freight_value
+        description: >
+          Frete por item em reais (NUMERIC). Frete total do pedido =
+          SUM(item_freight_value) GROUP BY order_id.
+        data_tests:
+          - not_null
+
+  # --------------------------------------------------------------------------
+  # Pagamentos: granularidade (order_id, payment_sequential).
+  # Cuidado ao agregar: SUM(payment_value) antes de qualquer join.
+  # --------------------------------------------------------------------------
+  - name: stg_olist__order_payments
+    description: >
+      Pagamentos por pedido. Granularidade: 1 linha por
+      (order_id, payment_sequential). Um pedido pode ter N métodos de
+      pagamento combinados (ex: voucher + cartão). Para valor total do
+      pedido, sempre SUM(payment_value) GROUP BY order_id antes de
+      qualquer join com outras tabelas.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - order_id
+              - payment_sequential
+    columns:
+
+      - name: order_id
+        description: "FK para stg_olist__orders."
+        data_tests:
+          - not_null
+
+      - name: payment_sequential
+        description: >
+          Sequencial do pagamento dentro do pedido. Junto com order_id
+          forma a chave primária composta. MAX por pedido indica quantos
+          métodos de pagamento foram usados.
+        data_tests:
+          - not_null
+
+      - name: payment_type
+        description: >
+          Método de pagamento em lowercase. Valores no dataset:
+          credit_card, boleto, voucher, debit_card, not_defined.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - credit_card
+                  - boleto
+                  - voucher
+                  - debit_card
+                  - not_defined
+
+      - name: payment_installments
+        description: >
+          Número de parcelas (INT64). 0 ou 1 = à vista. Máximo
+          no dataset é 24.
+        data_tests:
+          - not_null
+
+      - name: payment_value
+        description: >
+          Valor do pagamento em reais (NUMERIC). Para receita total
+          do pedido: SUM(payment_value) GROUP BY order_id.
+        data_tests:
+          - not_null
+
+  # --------------------------------------------------------------------------
+  # Reviews: 1 review por pedido após deduplicação. 0.56% de duplicatas
+  # tratadas na staging (review mais recente por order_id preservada).
+  # --------------------------------------------------------------------------
+  - name: stg_olist__order_review
+    description: >
+      Avaliações de pedidos pelos clientes. Granularidade: 1 linha por
+      order_id (após deduplicação via ROW_NUMBER na staging). O dataset
+      raw tinha 551 casos de múltiplas reviews por pedido (0.56% do total),
+      tratados mantendo a review com review_answer_timestamp mais recente.
+      Score de 1 a 5, distribuição bimodal concentrada em 1 e 5.
+    columns:
+
+      - name: review_id
+        description: >
+          Identificador da avaliação. NÃO é PK confiável: o dataset Olist
+          tem casos onde o mesmo review_id aparece em múltiplos pedidos
+          (provável bug do sistema de origem, mesmo formulário linkado a N pedidos).
+          A unicidade garantida nesta tabela é por order_id.
+        data_tests:
+          - not_null
+
+      - name: order_id
+        description: >
+          FK para stg_olist__orders. Único nesta tabela após deduplicação.
+        data_tests:
+          - unique
+          - not_null
+
+      - name: review_score
+        description: >
+          Nota de 1 a 5 (INT64). Distribuição bimodal: concentração em
+          5 (promotores) e 1 (detratores). Scores 4-5 = promotores,
+          3 = neutro, 1-2 = detratores.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+
+      - name: review_comment_title
+        description: "Título do comentário em português. Frequentemente null."
+
+      - name: review_comment_message
+        description: "Corpo do comentário em português. Frequentemente null."
+
+      - name: review_created_at
+        description: "Timestamp em que o convite de avaliação foi enviado."
+
+      - name: review_answered_at
+        description: >
+          Timestamp em que o cliente respondeu. Base da deduplicação:
+          em pedidos com múltiplas reviews, manteve-se a de
+          review_answered_at mais recente.
+
+  # --------------------------------------------------------------------------
+  # Geolocalização: 1 linha por CEP após agregação de 1M+ linhas.
+  # Lat/lng = centróide (média). Lookup pra enriquecer customers e sellers.
+  # --------------------------------------------------------------------------
+  - name: stg_olist__geolocation
+    description: >
+      Coordenadas geográficas por prefixo de CEP brasileiro. Granularidade:
+      1 linha por zip_code_prefix, obtida por agregação da raw (que tinha
+      52 linhas por CEP em média, totalizando 1M+ linhas). Estratégia de
+      agregação: AVG(lat/lng) pra centróide, ANY_VALUE pra city e state.
+      Resultado: ~19k linhas prontas pra join com customers e sellers.
+    columns:
+
+      - name: zip_code_prefix
+        description: >
+          Prefixo do CEP brasileiro (string de 5 dígitos). Chave primária
+          após agregação.
+        data_tests:
+          - unique
+          - not_null
+
+      - name: lat
+        description: >
+          Latitude média das coordenadas dentro do prefixo. Centróide
+          aproximado da área geográfica coberta pelo CEP.
+        data_tests:
+          - not_null
+
+      - name: lng
+        description: >
+          Longitude média das coordenadas dentro do prefixo.
+        data_tests:
+          - not_null
+
+      - name: city
+        description: >
+          Cidade associada ao CEP (ANY_VALUE após LOWER+TRIM).
+          Não confiável pra agregação: prefixos de 5 dígitos cobrem
+          múltiplas cidades em casos de fronteira municipal, e o
+          dataset tem variações de grafia não normalizadas
+          (acentuação, apóstrofo, hífen). Usar state pra qualquer
+          análise geográfica agregada.
+
+      - name: state
+        description: >
+          UF do CEP em uppercase (ANY_VALUE do grupo). Mais confiável
+          que city pra agregações geográficas.

@@ -1,0 +1,417 @@
+version: 2
+
+sources:
+  - name: olist_raw
+    description: >
+      Dados raw do dataset Olist Brazilian E-Commerce (Kaggle), carregados
+      via pipeline Python no BigQuery. 9 tabelas cobrindo pedidos, clientes,
+      produtos, vendedores, avaliações, pagamentos e geolocalização.
+      Período: ~set/2016 a out/2018.
+      Fonte original: https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
+    database: olist-funnel-analysis-494020
+    schema: raw
+
+    tables:
+
+      # ----------------------------------------------------------------------
+      # Pedidos: tabela central do modelo. Toda análise de funil parte daqui.
+      # ----------------------------------------------------------------------
+      - name: orders
+        description: >
+          Pedido como entidade de negócio. Granularidade: 1 linha por pedido.
+          Contém o ciclo de vida operacional (created, approved, shipped,
+          delivered) e o status final. Liga-se a customers via customer_id.
+        columns:
+
+          - name: order_id
+            description: "Chave primária do pedido."
+            data_tests:
+              - not_null
+
+          - name: customer_id
+            description: "FK para customers."
+            data_tests:
+              - not_null
+
+          - name: order_status
+            description: >
+              Status atual do pedido. Define a posição do pedido no funil
+              operacional. Valores possíveis no dataset: created, approved,
+              invoiced, processing, shipped, delivered, canceled, unavailable.
+              Distribuição é fortemente concentrada em 'delivered' (~97%).
+
+          - name: order_purchase_timestamp
+            description: "Timestamp da compra. Âncora temporal de cohorts."
+
+          - name: order_approved_at
+            description: >
+              Timestamp em que o pagamento foi aprovado. Gap entre
+              purchase e approved indica latência do meio de pagamento.
+
+          - name: order_delivered_carrier_date
+            description: >
+              Timestamp em que o pedido saiu do seller e foi entregue
+              à transportadora. Marca o fim da etapa de fulfillment
+              do vendedor.
+
+          - name: order_delivered_customer_date
+            description: >
+              Timestamp da entrega efetiva ao cliente. Fim do funil
+              operacional para pedidos bem-sucedidos. Null em pedidos
+              não entregues (canceled, em trânsito, etc).
+
+          - name: order_estimated_delivery_date
+            description: >
+              Data prometida de entrega no momento da compra. Gap
+              negativo contra delivered_customer_date indica atraso,
+              uma das principais métricas de qualidade operacional.
+
+      # ----------------------------------------------------------------------
+      # Itens do pedido: granularidade fina, 1 linha por item dentro do pedido.
+      # ----------------------------------------------------------------------
+      - name: order_items
+        description: >
+          Itens individuais dentro de cada pedido. Granularidade:
+          (order_id, order_item_id). Um pedido pode ter N itens, cada um
+          potencialmente de um seller diferente. Contém preço e frete por item.
+        columns:
+
+          - name: order_id
+            description: "FK para orders."
+            data_tests:
+              - not_null
+
+          - name: order_item_id
+            description: >
+              Sequencial do item dentro do pedido (1, 2, 3...). Junto com
+              order_id forma a chave primária composta. O valor máximo
+              dessa coluna em um pedido indica quantos itens o pedido teve.
+            data_tests:
+              - not_null
+
+          - name: product_id
+            description: "FK para products."
+
+          - name: seller_id
+            description: >
+              FK para sellers. Diferentes itens do mesmo pedido podem ter
+              sellers diferentes (marketplace multi-seller), o que afeta
+              cálculo de fulfillment e atribuição de receita por vendedor.
+
+          - name: shipping_limit_date
+            description: >
+              Prazo máximo que o seller tem para postar o item à
+              transportadora. Comparar contra order_delivered_carrier_date
+              (em orders) mede se o seller cumpriu o SLA de fulfillment.
+
+          - name: price
+            description: >
+              Preço unitário do item em reais (BRL). Em pedidos com N itens
+              do mesmo produto, aparecem N linhas com mesmo price; receita
+              de produto do pedido = SUM(price). Exemplo da doc oficial:
+              um pedido com 3 itens de price=21.33 tem receita de produto
+              de 63.99.
+
+          - name: freight_value
+            description: >
+              Valor do frete em reais, por item. Em pedidos multi-item, o
+              frete original é dividido proporcionalmente entre as linhas.
+              Para frete total do pedido, fazer SUM(freight_value)
+              agrupando por order_id. Útil pra calcular freight ratio
+              (frete / preço) como proxy de custo logístico.
+
+      # ----------------------------------------------------------------------
+      # Pagamentos: 1 pedido pode ter múltiplos pagamentos (parcelas, voucher).
+      # ----------------------------------------------------------------------
+      - name: order_payments
+        description: >
+          Pagamentos associados a cada pedido. Granularidade:
+          (order_id, payment_sequential). Um pedido pode ter N pagamentos
+          (ex: parte voucher + parte crédito). Cuidado ao somar payment_value
+          sem agregar primeiro: pode duplicar receita.
+        columns:
+
+          - name: order_id
+            description: "FK para orders."
+            data_tests:
+              - not_null
+
+          - name: payment_sequential
+            description: >
+              Sequencial do pagamento dentro do pedido (1, 2, 3...).
+              Junto com order_id forma a chave primária composta. Valores
+              maiores que 1 indicam que o cliente dividiu o pagamento entre
+              múltiplos métodos (ex: voucher + cartão).
+            data_tests:
+              - not_null
+
+          - name: payment_type
+            description: >
+              Método de pagamento (credit_card, boleto, voucher, debit_card,
+              not_defined). Distribuição é fortemente concentrada em
+              credit_card no dataset Olist.
+
+          - name: payment_installments
+            description: >
+              Número de parcelas do pagamento (1 a 24). Valor 0 ou 1 indica
+              pagamento à vista. Relevante pra análise de comportamento do
+              cliente brasileiro, onde parcelamento sem juros é diferencial
+              competitivo. Não confundir com payment_sequential.
+
+          - name: payment_value
+            description: >
+              Valor pago em reais (BRL) nesse registro de pagamento. Para
+              obter o valor total do pedido, fazer SUM(payment_value)
+              agrupando por order_id antes de qualquer join com orders,
+              senão a receita aparece duplicada nos pedidos com pagamento
+              fracionado.
+
+      # ----------------------------------------------------------------------
+      # Avaliações: 1 review por pedido (na prática). NPS proxy do Olist.
+      # ----------------------------------------------------------------------
+      - name: order_reviews
+        description: >
+          Avaliações de pedidos pelos clientes. Score 1-5. Granularidade
+          esperada: 1 linha por pedido, mas o dataset tem alguns casos
+          de múltiplas reviews por pedido (a investigar na exploração).
+          Proxy de NPS do Olist, dimensão central pra análise de qualidade
+          de experiência.
+        columns:
+
+          - name: review_id
+            description: "Chave primária da avaliação."
+            data_tests:
+              - not_null
+
+          - name: order_id
+            description: >
+              FK para orders. Em teoria 1:1 com orders, mas há casos no
+              dataset onde o mesmo order_id aparece em múltiplas reviews,
+              o que viola a granularidade esperada. Investigar e tratar
+              na camada staging (ex: pegar a review mais recente por pedido).
+            data_tests:
+              - not_null
+
+          - name: review_score
+            description: >
+              Nota de 1 a 5 dada pelo cliente. Distribuição típica é
+              bimodal no Olist (concentração em 5 e em 1), padrão comum
+              de avaliações online. Scores 4-5 = promotores, 3 = neutro,
+              1-2 = detratores.
+
+          - name: review_comment_title
+            description: >
+              Título do comentário da avaliação, em português. Frequentemente
+              null. Texto livre, não padronizado.
+
+          - name: review_comment_message
+            description: >
+              Corpo do comentário, em português. Frequentemente null. Texto
+              livre. Potencial pra análise textual (sentimento, temas),
+              fora do escopo deste projeto mas útil pra evolução futura.
+
+          - name: review_creation_date
+            description: >
+              Timestamp em que a review foi criada (cliente recebeu o
+              convite pra avaliar). Geralmente próximo da entrega do pedido.
+
+          - name: review_answer_timestamp
+            description: >
+              Timestamp em que o cliente efetivamente respondeu a avaliação.
+              Gap entre creation e answer mede engajamento do cliente com
+              o processo de review. Resposta imediata vs tardia pode
+              correlacionar com o score atribuído.
+
+      # ----------------------------------------------------------------------
+      # Clientes: customer_id != pessoa. Use customer_unique_id pra deduplicar.
+      # ----------------------------------------------------------------------
+      - name: customers
+        description: >
+          Clientes do Olist. Granularidade: 1 linha por (customer_id),
+          ou seja, 1 linha por cliente-pedido. Para identificar uma
+          pessoa única ao longo do tempo, use customer_unique_id
+          (várias customer_id podem mapear pra mesma pessoa em compras
+          diferentes). Esse é o principal "pega" do dataset Olist.
+        columns:
+
+          - name: customer_id
+            description: >
+              Chave primária da tabela. NÃO é o ID estável da pessoa,
+              é o ID do par (pessoa, pedido).
+            data_tests:
+              - not_null
+
+          - name: customer_unique_id
+            description: >
+              ID estável da pessoa. Use isso para análise de retenção,
+              LTV, recompra. Pode aparecer múltiplas vezes na tabela.
+            data_tests:
+              - not_null
+
+          - name: customer_zip_code_prefix
+            description: "Prefixo do CEP (5 dígitos). FK para geolocation."
+
+          - name: customer_city
+            description: >
+              Cidade de residência do cliente. Texto livre, pode ter
+              inconsistências de capitalização e acentuação. Tratar
+              na staging se for usar pra agregação.
+
+          - name: customer_state
+            description: "UF do cliente (SP, RJ, MG, etc)."
+
+      # ----------------------------------------------------------------------
+      # Produtos: catálogo. category_name precisa traduzir via translation.
+      # ----------------------------------------------------------------------
+      - name: products
+        description: >
+          Catálogo de produtos. Granularidade: 1 linha por product_id.
+          Nome da categoria está em português; usar
+          category_name_translation para versão em inglês.
+        columns:
+
+          - name: product_id
+            description: "Chave primária do produto."
+            data_tests:
+              - not_null
+
+          - name: product_category_name
+            description: >
+              Categoria em português. FK para category_name_translation.
+              Pode ter null (produtos sem categoria atribuída).
+
+          - name: product_name_lenght
+            description: >
+              Número de caracteres no nome do produto. Atenção: nome da
+              coluna na raw tem typo ("lenght" em vez de "length"), preservado
+              do dataset original do Kaggle. Renomear pra product_name_length
+              na staging. Proxy de qualidade do anúncio (títulos muito curtos
+              ou muito longos correlacionam com conversão pior).
+
+          - name: product_description_lenght
+            description: >
+              Número de caracteres na descrição do produto. Mesmo typo
+              "lenght" da raw, corrigir na staging. Pode indicar maturidade
+              do anúncio: descrições muito curtas tendem a converter pior.
+
+          - name: product_photos_qty
+            description: >
+              Quantidade de fotos do produto no anúncio. Variável clássica
+              de qualidade de listing em marketplace, correlaciona com
+              conversão e com review score.
+
+          - name: product_weight_g
+            description: >
+              Peso do produto em gramas. Base pra cálculos de custo
+              logístico e validação de freight_value (frete deveria
+              correlacionar com peso e dimensões).
+
+          - name: product_length_cm
+            description: "Comprimento do produto em centímetros."
+
+          - name: product_height_cm
+            description: "Altura do produto em centímetros."
+
+          - name: product_width_cm
+            description: >
+              Largura do produto em centímetros. Junto com length e height
+              permite calcular volume (cm3), útil pra modelar custo
+              logístico ou identificar produtos volumosos.
+
+      # ----------------------------------------------------------------------
+      # Vendedores
+      # ----------------------------------------------------------------------
+      - name: sellers
+        description: >
+          Vendedores marketplace. Granularidade: 1 linha por seller_id.
+          Dimensão central pra análise de performance de vendedor:
+          fulfillment, mix de categorias, concentração geográfica.
+        columns:
+
+          - name: seller_id
+            description: "Chave primária do vendedor."
+            data_tests:
+              - not_null
+
+          - name: seller_zip_code_prefix
+            description: >
+              Prefixo do CEP do vendedor (5 dígitos). FK para geolocation.
+              Combinado com customer_zip_code_prefix permite calcular
+              distância geográfica entre origem e destino, proxy de
+              custo e tempo de entrega.
+
+          - name: seller_city
+            description: >
+              Cidade do vendedor. Texto livre na raw, pode ter inconsistências
+              de capitalização e acentuação (ex: "são paulo" vs "sao paulo"
+              vs "São Paulo"). Tratar na staging se for usar pra agregação.
+
+          - name: seller_state
+            description: >
+              UF do vendedor (SP, RJ, MG, etc). Concentração esperada em
+              SP no dataset Olist. Combinar com customer_state pra medir
+              padrão intra vs inter-estado das vendas.
+
+      # ----------------------------------------------------------------------
+      # Geolocalização: NÃO é única por CEP (múltiplos registros por prefixo).
+      # ----------------------------------------------------------------------
+      - name: geolocation
+        description: >
+          Coordenadas geográficas por prefixo de CEP brasileiro.
+          ATENÇÃO: granularidade não é única por zip_code_prefix.
+          O mesmo CEP pode ter múltiplas linhas (diferentes
+          coordenadas dentro do mesmo prefixo, refletindo a área
+          geográfica que o prefixo cobre). Precisará de agregação na
+          camada staging para virar 1 linha por CEP (estratégia
+          típica: média de lat/lng, ou centróide). 1 milhão+ de linhas
+          na raw, mas só ~19k CEPs únicos.
+        columns:
+
+          - name: geolocation_zip_code_prefix
+            description: >
+              Prefixo do CEP brasileiro (5 dígitos). NÃO é chave primária
+              da tabela: cada prefixo aparece N vezes, uma por coordenada
+              registrada dentro daquela região postal.
+
+          - name: geolocation_lat
+            description: >
+              Latitude. Múltiplos valores por prefixo de CEP. Agregar
+              (média ou mediana) na staging pra obter um ponto único
+              representando o prefixo.
+
+          - name: geolocation_lng
+            description: >
+              Longitude. Mesma observação de geolocation_lat.
+
+          - name: geolocation_city
+            description: >
+              Cidade associada à coordenada. Texto livre, pode variar
+              dentro do mesmo prefixo de CEP (inconsistências de grafia)
+              e pode até divergir entre linhas do mesmo CEP (raro mas
+              ocorre). Tratar na staging se for usar.
+
+          - name: geolocation_state
+            description: >
+              UF (SP, RJ, MG, etc). Mais consistente que city dentro
+              do mesmo prefixo, mas ainda assim vale agregar com MAX
+              ou MODE na staging pra garantir 1 linha por CEP.
+
+      # ----------------------------------------------------------------------
+      # Tradução de categorias: lookup table pequena.
+      # ----------------------------------------------------------------------
+      - name: category_name_translation
+        description: >
+          Tabela de tradução pt-BR -> inglês das categorias de produto.
+          Granularidade: 1 linha por categoria em português.
+          ATENÇÃO: o arquivo CSV original tem BOM UTF-8, o que pode
+          ter resultado em coluna com nome estranho tipo
+          'ï»¿product_category_name'. Verificar e renomear na staging.
+        columns:
+
+          - name: product_category_name
+            description: "Categoria em pt-BR. PK."
+            data_tests:
+              - not_null
+
+          - name: product_category_name_english
+            description: "Categoria traduzida."

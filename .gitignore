@@ -5,3 +5,4 @@ dbt_packages/
 logs/
 dbt_internal_packages/
 raw_files/
+__pycache__/

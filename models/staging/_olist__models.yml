@@ -364,7 +364,7 @@ models:
   # Reviews: 1 review por pedido após deduplicação. 0.56% de duplicatas
   # tratadas na staging (review mais recente por order_id preservada).
   # --------------------------------------------------------------------------
-  - name: stg_olist__order_reviews
+  - name: stg_olist__order_review
     description: >
       Avaliações de pedidos pelos clientes. Granularidade: 1 linha por
       order_id (após deduplicação via ROW_NUMBER na staging). O dataset
@@ -374,9 +374,12 @@ models:
     columns:
 
       - name: review_id
-        description: "Chave primária da avaliação."
+        description: >
+          Identificador da avaliação. NÃO é PK confiável: o dataset Olist
+          tem casos onde o mesmo review_id aparece em múltiplos pedidos
+          (provável bug do sistema de origem, mesmo formulário linkado a N pedidos).
+          A unicidade garantida nesta tabela é por order_id.
         data_tests:
-          - unique
           - not_null
 
       - name: order_id
@@ -396,6 +399,7 @@ models:
           - accepted_values:
               arguments:
                 values: [1, 2, 3, 4, 5]
+                quote: false
 
       - name: review_comment_title
         description: "Título do comentário em português. Frequentemente null."

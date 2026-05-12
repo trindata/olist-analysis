@@ -42,9 +42,11 @@ joined as (
         -- logística
         round(avg(o.days_to_deliver), 1)            as avg_days_to_deliver,
         round(avg(o.delivery_delay_days), 1)        as avg_delay_days,
-        countif(o.is_late)                          as late_orders,
-        round(countif(o.is_late) * 100.0
-            / count(distinct o.order_id), 2)        as pct_late_orders,
+        count(distinct case when o.is_late then o.order_id end) as late_orders,
+        round(
+            count(distinct case when o.is_late then o.order_id end) * 100.0
+            / count(distinct o.order_id)
+        , 2)                                        as pct_late_orders,
 
         -- satisfação
         round(avg(o.review_score), 2)               as avg_review_score,

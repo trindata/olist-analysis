@@ -40,8 +40,8 @@ joined as (
         round(sum(oi.item_gross_value), 2)          as seller_gross_value,
 
         -- logística
-        round(avg(o.days_to_deliver), 1)            as avg_days_to_deliver,
-        round(avg(o.delivery_delay_days), 1)        as avg_delay_days,
+        round(avg(distinct o.days_to_deliver), 1)       as avg_days_to_deliver,
+        round(avg(distinct o.delivery_delay_days), 1)   as avg_delay_days,
         count(distinct case when o.is_late then o.order_id end) as late_orders,
         round(
             count(distinct case when o.is_late then o.order_id end) * 100.0
@@ -50,8 +50,8 @@ joined as (
 
         -- satisfação
         round(avg(o.review_score), 2)               as avg_review_score,
-        countif(o.review_score >= 4)                as positive_reviews,
-        countif(o.review_score <= 2)                as negative_reviews,
+        count(distinct case when o.review_score >= 4 then o.order_id end) as positive_reviews,
+        count(distinct case when o.review_score <= 2 then o.order_id end) as negative_reviews,
 
         -- período de atividade
         min(date(o.purchased_at))                   as first_sale_date,

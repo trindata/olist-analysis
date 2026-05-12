@@ -14,6 +14,12 @@ Pipeline analítica de ponta a ponta sobre o [Brazilian E-Commerce Public Datase
 
 ---
 
+## Dashboard
+
+[Acessar no Looker Studio](https://datastudio.google.com/reporting/dfd5c732-95a3-4204-adfd-dbb5db8cac5d)
+
+---
+
 ## Arquitetura
 
 ```

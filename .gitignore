@@ -6,3 +6,7 @@ logs/
 dbt_internal_packages/
 raw_files/
 __pycache__/
+*.pyc
+*.pyo
+secrets/
+.env

@@ -4,7 +4,7 @@ import pandas as pd
 from google.cloud import bigquery
 from google.oauth2 import service_account
 
-from bigquery_management.modelo_bigquery import BigQueryConfig
+from bigquery.modelo_bigquery import BigQueryConfig
     
 # =============================================================================
 # Enviar dado dados ao BigQuery

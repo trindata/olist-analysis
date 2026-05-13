@@ -8,5 +8,14 @@ raw_files/
 __pycache__/
 *.pyc
 *.pyo
-secrets/
 .env
+.venv/
+.python-version
+
+# Ignora toda a pasta secrets
+secrets/
+
+# MAS permite especificamente o arquivo de exemplo
+!kaggle/secrets/
+!kaggle/secrets/bigquery_service_account-example.json
+

@@ -1,6 +1,11 @@
+![dbt](https://img.shields.io/badge/dbt-FF694B?logo=dbt&logoColor=white)
+![BigQuery](https://img.shields.io/badge/BigQuery-4285F4?logo=googlebigquery&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
 # olist-funnel-analysis
 
 Pipeline analítica de ponta a ponta sobre o [Brazilian E-Commerce Public Dataset da Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce), construída com Python, dbt e BigQuery. O projeto aplica práticas de Analytics Engineering para responder perguntas reais de negócio sobre performance operacional, comercial e de vendedores em um marketplace brasileiro.
+
+Teste na sua máquina: [setup](SETUP.md)
 
 ---
 
@@ -17,6 +22,30 @@ Pipeline analítica de ponta a ponta sobre o [Brazilian E-Commerce Public Datase
 ## Dashboard
 
 [Acessar no Looker Studio](https://datastudio.google.com/reporting/dfd5c732-95a3-4204-adfd-dbb5db8cac5d)
+
+### Principais Insights
+
+1. **Atrasos concentrados em categorias pesadas**: 28% dos pedidos de móveis atrasam vs 12% média geral
+2. **Sellers SP têm review score 0.4 pontos maior** que média nacional (controle de qualidade?)
+3. **Freight ratio acima de 20% correlaciona com review score <3** (cliente penaliza frete caro)
+
+---
+
+## Visualizações
+
+### Overview Operacional
+![Dashboard Operacional](assets/dashboard_operational.png)
+
+### Performance por Categoria
+![Dashboard Comercial](assets/dashboard_commercial.png)
+
+---
+
+## Roadmap
+
+- [ ] Modelo preditivo de atraso (categoria + peso + origem/destino)
+- [ ] Análise de cohort de retenção (% clientes que recompram por mês de primeira compra)
+- [ ] Integração com API de frete (Correios/Jadlog) para benchmark de custo real vs cobrado
 
 ---
 
@@ -45,7 +74,7 @@ Looker Studio
 
 ## Lineage
 
-> ![Lineage](lineage_v2.png)
+> ![Lineage](assets/lineage_v2.png)
 
 ---
 

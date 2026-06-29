@@ -12,11 +12,7 @@ __pycache__/
 .venv/
 .python-version
 
-# Ignora toda a pasta secrets
-secrets/bigquery_service_account.json
+# Ignora toda a pasta secrets, mas permite especificamente o arquivo de exemplo
 secrets/
-
-# MAS permite especificamente o arquivo de exemplo
-!kaggle/secrets/
-!kaggle/secrets/bigquery_service_account-example.json
+!secrets/bigquery_service_account-example.json
 

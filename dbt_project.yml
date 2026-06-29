@@ -7,10 +7,7 @@
 name: "olist_project"
 version: "1.0.0"
 config-version: 2
-
-# Profile gerenciado pelo dbt Cloud via UI (essa linha é ignorada no Cloud,
-# mas mantida pra compatibilidade caso o projeto seja rodado local no futuro).
-profile: "default"
+profile: "olist_project"
 
 # ----------------------------------------------------------------------------
 # Paths (defaults do dbt, sem alteração)

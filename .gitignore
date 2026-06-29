@@ -13,6 +13,7 @@ __pycache__/
 .python-version
 
 # Ignora toda a pasta secrets
+secrets/bigquery_service_account.json
 secrets/
 
 # MAS permite especificamente o arquivo de exemplo

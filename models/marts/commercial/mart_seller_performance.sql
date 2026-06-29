@@ -11,9 +11,6 @@ orders as (
         order_status,
         review_score,
         is_late,
-        days_to_deliver,
-        delivery_delay_days,
-        purchased_at,
         purchase_month,
         purchase_year
 
@@ -21,52 +18,112 @@ orders as (
 
 ),
 
-joined as (
+-- ----------------------------------------------------------------------
+-- 1 linha por (categoria, mês, pedido). Resolve o fan-out de items dentro
+-- da mesma categoria: um pedido com 3 items na mesma categoria deve contar
+-- como 1 pedido naquela categoria, não 3.
+-- Métricas de pedido (review, atraso) ficam por pedido distinto.
+-- Métricas de item (preço, frete, peso) somam/agregam os items do pedido
+-- naquela categoria.
+-- ----------------------------------------------------------------------
+category_orders as (
 
     select
-        oi.seller_id,
-        oi.seller_state,
-        oi.seller_city,
+        oi.product_category_name_en             as category,
+        o.purchase_year,
+        o.purchase_month,
+        o.order_id,
 
-        -- volume
-        count(distinct o.order_id)          as total_orders,
-        count(distinct oi.product_id)       as unique_products,
-        count(distinct
-            oi.product_category_name_en)    as unique_categories,
+        -- atributos do pedido (constantes dentro do grupo)
+        any_value(o.review_score)               as review_score,
+        any_value(o.is_late)                    as is_late,
 
-        -- receita
-        round(sum(oi.item_price), 2)                as seller_revenue,
-        round(avg(oi.item_price), 2)                as avg_item_price,
-        round(sum(oi.item_gross_value), 2)          as seller_gross_value,
+        -- agregados de item dentro da categoria pro pedido
+        sum(oi.item_price)                      as order_category_revenue,
+        sum(oi.item_gross_value)                as order_category_gross_value,
+        count(oi.order_item_id)                 as items_in_category,
+        any_value(oi.seller_id)                 as any_seller_id,
 
-        -- logística
-        round(avg(distinct o.days_to_deliver), 1)       as avg_days_to_deliver,
-        round(avg(distinct o.delivery_delay_days), 1)   as avg_delay_days,
-        count(distinct case when o.is_late then o.order_id end) as late_orders,
-        round(
-            count(distinct case when o.is_late then o.order_id end) * 100.0
-            / count(distinct o.order_id)
-        , 2)                                        as pct_late_orders,
-
-        -- satisfação
-        round(avg(o.review_score), 2)               as avg_review_score,
-        count(distinct case when o.review_score >= 4 then o.order_id end) as positive_reviews,
-        count(distinct case when o.review_score <= 2 then o.order_id end) as negative_reviews,
-
-        -- período de atividade
-        min(date(o.purchased_at))                   as first_sale_date,
-        max(date(o.purchased_at))                   as last_sale_date
+        -- médias por item dentro do pedido na categoria
+        avg(oi.item_price)                      as avg_item_price_in_order,
+        avg(oi.item_freight_ratio_pct)          as avg_freight_ratio_in_order,
+        avg(oi.product_weight_g)                as avg_weight_in_order
 
     from order_items oi
-    inner join orders o
-        using (order_id)
+    inner join orders o using (order_id)
 
     where o.order_status = 'delivered'
 
     group by
-        oi.seller_id,
-        oi.seller_state,
-        oi.seller_city
+        oi.product_category_name_en,
+        o.purchase_year,
+        o.purchase_month,
+        o.order_id
+
+),
+
+-- ----------------------------------------------------------------------
+-- Sellers ativos por (categoria, mês). Calculado separado porque a CTE
+-- acima já colapsou o seller_id (any_value), então um distinct lá perderia
+-- sellers múltiplos do mesmo pedido na mesma categoria.
+-- ----------------------------------------------------------------------
+category_sellers as (
+
+    select
+        oi.product_category_name_en             as category,
+        o.purchase_year,
+        o.purchase_month,
+        count(distinct oi.seller_id)            as active_sellers
+
+    from order_items oi
+    inner join orders o using (order_id)
+
+    where o.order_status = 'delivered'
+
+    group by
+        oi.product_category_name_en,
+        o.purchase_year,
+        o.purchase_month
+
+),
+
+joined as (
+
+    select
+        co.category,
+        co.purchase_year,
+        co.purchase_month,
+
+        -- volume
+        count(*)                                        as total_orders,
+        cs.active_sellers,
+
+        -- receita
+        round(sum(co.order_category_revenue), 2)        as category_revenue,
+        round(avg(co.avg_item_price_in_order), 2)       as avg_item_price,
+        round(sum(co.order_category_gross_value), 2)    as category_gross_value,
+
+        -- logística (médias por pedido distinto na categoria)
+        round(avg(co.avg_freight_ratio_in_order), 2)    as avg_freight_ratio_pct,
+        round(avg(co.avg_weight_in_order), 1)           as avg_product_weight_g,
+
+        -- satisfação (média por pedido distinto)
+        round(avg(co.review_score), 2)                  as avg_review_score,
+        countif(co.review_score >= 4)                   as positive_reviews,
+        countif(co.review_score <= 2)                   as negative_reviews,
+
+        -- pontualidade (por pedido distinto)
+        countif(co.is_late)                             as late_orders
+
+    from category_orders co
+    left join category_sellers cs
+        using (category, purchase_year, purchase_month)
+
+    group by
+        co.category,
+        co.purchase_year,
+        co.purchase_month,
+        cs.active_sellers
 
 )
 

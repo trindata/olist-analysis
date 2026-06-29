@@ -12,7 +12,6 @@ __pycache__/
 .venv/
 .python-version
 
-# Ignora toda a pasta secrets, mas permite especificamente o arquivo de exemplo
 # Secrets — bloqueia tudo dentro, exceto o exemplo
 secrets/*
 !secrets/bigquery_service_account-example.json

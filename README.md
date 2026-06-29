@@ -94,13 +94,56 @@ Continue lendo para o setup detalhado.
 **Análise de Vendedores**
 ![Análise Vendedores](assets/dash_vendedores.png)
 
-### Principais Insights
+## Principais Insights
 
-Análise do dataset Olist (set/2016 a out/2018):
+Análise do dataset Olist (set/2016 a out/2018, 96.478 pedidos entregues). Os insights abaixo foram extraídos da [biblioteca de queries de exploração](queries/) — cada arquivo `.sql` documenta a pergunta de negócio, a hipótese inicial, os dados que sustentam a conclusão, e a interpretação.
 
-1. **Atrasos concentrados em categorias pesadas**: 28% dos pedidos de móveis atrasam vs 12% média geral
-2. **Sellers SP têm review score 0.4 pontos maior** que média nacional
-3. **Freight ratio acima de 20% correlaciona com review score <3**: cliente penaliza frete caro
+### Operação e logística
+
+**1. Atraso é problema sistêmico, não de categoria.** A média geral de atraso é 8,11%. Nenhuma categoria de volume relevante (≥2.000 pedidos) ultrapassa 10%. A hipótese inicial de "categorias pesadas atrasam mais" não se sustenta: móveis ficam em torno da média, enquanto categorias leves como áudio (12,9%) lideram o ranking. O atraso responde a fatores logísticos, não ao tipo de produto. [`01_taxa_atraso_por_categoria.sql`](queries/operational/01_taxa_atraso_por_categoria.sql)
+
+**2. Atrasos são episódicos, não estruturais.** Em 23 meses, 19 ficam abaixo de 9% de atraso. A média do buffer prometido vs real é ~12 dias — folga ampla. As crises se concentram em três janelas: Black Friday 2017 (14% atraso), fev–mar/2018 (15–21%, pior mês histórico) e ago/2018 (10%). Esta última coincide com mudança comercial: a promessa de prazo caiu 33% (24 → 16 dias), mas o atraso dobrou — trade-off claro entre rapidez prometida e confiabilidade. [`02_prazo_real_vs_prometido.sql`](queries/operational/02_prazo_real_vs_prometido.sql)
+
+**3. Distância geográfica é o principal driver de atraso.** As 30 piores rotas seller→cliente são **todas interestaduais**. SP→Alagoas atrasa 26% (3× a média geral). Sellers em SP, que concentram volume, aparecem em 15 dessas 30 piores rotas — não por baixa qualidade, mas por servir todo o país. A rota SP→RJ tem o maior impacto absoluto: 1.264 atrasos em 8.188 pedidos. [`03_atrasos_por_distancia_seller_cliente.sql`](queries/operational/03_atrasos_por_distancia_seller_cliente.sql)
+
+### Comercial e categorias
+
+**4. Risco reputacional concentrado em duas categorias.** `bed_bath_table` (R$ 1.023k, review 4,00, 8,75% atraso) e `furniture_decor` (R$ 712k, review 4,06, 8,48%) somam R$ 1,7 milhão em receita no quartil top, mas ficam no quartil mais baixo de satisfação. São as candidatas naturais a investimento em qualidade — alto volume garante que cada ponto de review recuperado gera muita reposição. [`04_top_categorias_receita_vs_satisfacao.sql`](queries/commercial/04_top_categorias_receita_vs_satisfacao.sql)
+
+**5. Volume não correlaciona com satisfação.** Apenas duas categorias (`toys` e `perfumery`) combinam alto revenue com alto review — o quadrante "vaca leiteira" é rarefeito. A maior parte das categorias top de receita fica no quartil intermediário de satisfação. Sugere que vendas no Olist são dirigidas por preço e marketing, não por experiência. [`04_top_categorias_receita_vs_satisfacao.sql`](queries/commercial/04_top_categorias_receita_vs_satisfacao.sql)
+
+**6. Freight ratio impacta pouco a satisfação.** Variar o frete de <5% pra >50% do valor do pedido reduz o review médio em apenas 0,1 ponto (4,20 → 4,11) e aumenta `pct_negative` em 0,6 pontos percentuais. A hipótese de "cliente penaliza frete caro" tem efeito real mas modesto, sem cliff de virada — tendência é gradual. Mais interessante: o bucket de menor frete (0–5%) tem `pct_negative` ligeiramente maior que buckets do meio, possível efeito de qualidade ruim em produtos baratos. [`05_freight_ratio_vs_review_score.sql`](queries/commercial/05_freight_ratio_vs_review_score.sql)
+
+**7. Black Friday move 7 das 15 maiores categorias; Natal move ainda mais brinquedos.** `toys` concentra 36% da receita anual em nov+dez. Outras com pico claro de Black Friday: `garden_tools`, `furniture_decor`, `cool_stuff`, `telephony`, `perfumery`, `bed_bath_table`. Categorias de necessidade (saúde/beleza, esporte) reagem menos. Dia das Mães tem efeito menor que o esperado — só `watches_gifts` mostra pico claro em maio. [`06_sazonalidade_mensal_categoria.sql`](queries/commercial/06_sazonalidade_mensal_categoria.sql)
+
+### Sellers
+
+**8. Sellers SP não são melhores — são piores.** Inverso do senso comum: paulistas têm review 4,11 vs 4,20 dos demais estados, e 8,60% de atraso vs 6,44%. SP concentra 71% dos pedidos (763 sellers vs 475) porque atende todo o país, incluindo as rotas críticas pro Nordeste (validado no estudo 03). Sellers regionais entregam melhor porque atendem clientes próximos. A concentração em SP é simultaneamente força (volume, oferta) e fraqueza (experiência inferior). [`07_sp_vs_outros_estados.sql`](queries/sellers/07_sp_vs_outros_estados.sql)
+
+**9. Pareto 80/20 confirmado com precisão cirúrgica.** Top 20% dos sellers concentram 82,3% da receita. Top 5% (148 sellers) já passa de metade (52,9%). Os 29 sellers do top 1% movem mais dinheiro que os 1.485 da metade inferior somados. A metade inferior representa 3,3% da receita — sellers que existem como catálogo de cauda longa mas não movem o ponteiro. Esforço operacional de retenção e suporte deveria concentrar no top 10%. [`08_concentracao_receita_pareto.sql`](queries/sellers/08_concentracao_receita_pareto.sql)
+
+**10. Volume do seller não é proxy de qualidade.** Sellers de qualquer porte entregam experiência similar: review varia 4,13 a 4,26 entre quintis de volume, % atraso entre 7,98% e 8,86%. Não há sweet spot, nem U invertido. 88% dos pedidos vêm do quintil de sellers grandes, que tem a pior performance — embora marginal. Heurística "seller grande = seller confiável" não se sustenta no Olist. [`09_relacao_volume_qualidade_seller.sql`](queries/sellers/09_relacao_volume_qualidade_seller.sql)
+
+### Cliente e satisfação regional
+
+**11. Olist é negócio de aquisição, não retenção.** Pico histórico de recompra é 7,25% (cohort jan/2017); cohorts típicos retêm 3–5%. Marketplaces maduros ficam em 15–25%. Black Friday traz volume mas pior retenção: o cohort de nov/2017 trouxe 7.060 clientes (2,3× a média mensal anterior) mas só 3,16% recompraram. Eventos promocionais ampliam volume mas capturam "turistas de oferta" com baixa propensão a virar clientes recorrentes. [`10_recompra_por_cohort_mensal.sql`](queries/customer/10_recompra_por_cohort_mensal.sql)
+
+**12. Recorrentes gastam menos, não mais.** Contraintuitivo: clientes recorrentes têm ticket médio 10,8% **menor** que novos (R$ 123 vs R$ 138). Padrão típico de marketplace: a primeira compra é "compra de teste" com produto de valor médio-alto; as seguintes são utilitárias e repetíveis. Recorrentes representam só 5,5% da receita total — investimento em retenção precisa de horizonte de longo prazo pra valer ROI. [`11_clientes_recorrentes_vs_novos.sql`](queries/customer/11_clientes_recorrentes_vs_novos.sql)
+
+**13. Norte/Nordeste concentram problemas; SP é privilégio geográfico, não mérito.** Alagoas (23,4% atraso), Maranhão (19,2%) e Ceará (15,2%) lideram o ranking de atrasos por destino — net_score (% positivos − % negativos) cai pra ~50 nesses estados, contra ~70 no top. SP no topo do ranking é resultado de proximidade ao estoque (8,7 dias, o menor do país), não excelência operacional do Olist. O cliente de Manaus, mesmo comprando do seller paulista, recebe em 26 dias. [`12_satisfacao_por_estado_cliente.sql`](queries/customer/12_satisfacao_por_estado_cliente.sql)
+
+**14. Rio de Janeiro é o problema escondido.** Segundo maior mercado consumidor (12.211 pedidos), RJ tem net_score (55,10) **abaixo** de Alagoas e Pará — apesar do prazo médio ser razoável (15,2 dias). A taxa de atraso é 13,29%. Hipótese: cliente carioca espera prazo curto (SP-RJ é rota geograficamente curta) e penaliza qualquer atraso. A satisfação reflete expectativa, não tempo absoluto. [`12_satisfacao_por_estado_cliente.sql`](queries/customer/12_satisfacao_por_estado_cliente.sql)
+
+**15. Paradoxo da expectativa baixa: Amazonas.** Manaus recebe em 26,3 dias — segundo pior prazo do país — mas só 4,17% dos pedidos atrasam (terceiro melhor) e o review fica em 4,24. A estimativa de entrega é tão folgada que praticamente nada estoura, e o cliente já tem expectativa baixa. Calibração de promessa importa mais para satisfação que prazo absoluto. [`12_satisfacao_por_estado_cliente.sql`](queries/customer/12_satisfacao_por_estado_cliente.sql)
+
+### Resumo executivo
+
+| Tema          | Achado central                                                                                                                                                                              |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Operação**  | Atrasos são episódicos (3 crises temporais), dirigidos por distância (Nordeste como destino crítico), não por categoria de produto.                                                         |
+| **Comercial** | Concentração de receita em poucas categorias; risco reputacional em `bed_bath_table` e `furniture_decor`. Black Friday e Natal são únicos eventos sazonais relevantes. Frete impacta pouco. |
+| **Sellers**   | Pareto 80/20 exato. Volume do seller não é proxy de qualidade. Sellers SP são piores (atendem rotas longas), não melhores.                                                                  |
+| **Cliente**   | Recompra 3–5% (negócio de aquisição). Recorrentes gastam menos. Norte/Nordeste sofrem operacionalmente. RJ é problema escondido.                                                            |
 
 ---
 

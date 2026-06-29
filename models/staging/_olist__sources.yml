@@ -8,11 +8,10 @@ sources:
       produtos, vendedores, avaliações, pagamentos e geolocalização.
       Período: ~set/2016 a out/2018.
       Fonte original: https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
-    database: olist-funnel-analysis-494020
+    database: "{{ env_var('GCP_PROJECT_ID') }}"
     schema: raw
 
     tables:
-
       # ----------------------------------------------------------------------
       # Pedidos: tabela central do modelo. Toda análise de funil parte daqui.
       # ----------------------------------------------------------------------
@@ -22,7 +21,6 @@ sources:
           Contém o ciclo de vida operacional (created, approved, shipped,
           delivered) e o status final. Liga-se a customers via customer_id.
         columns:
-
           - name: order_id
             description: "Chave primária do pedido."
             data_tests:
@@ -75,7 +73,6 @@ sources:
           (order_id, order_item_id). Um pedido pode ter N itens, cada um
           potencialmente de um seller diferente. Contém preço e frete por item.
         columns:
-
           - name: order_id
             description: "FK para orders."
             data_tests:
@@ -130,7 +127,6 @@ sources:
           (ex: parte voucher + parte crédito). Cuidado ao somar payment_value
           sem agregar primeiro: pode duplicar receita.
         columns:
-
           - name: order_id
             description: "FK para orders."
             data_tests:
@@ -177,7 +173,6 @@ sources:
           Proxy de NPS do Olist, dimensão central pra análise de qualidade
           de experiência.
         columns:
-
           - name: review_id
             description: "Chave primária da avaliação."
             data_tests:
@@ -233,7 +228,6 @@ sources:
           (várias customer_id podem mapear pra mesma pessoa em compras
           diferentes). Esse é o principal "pega" do dataset Olist.
         columns:
-
           - name: customer_id
             description: >
               Chave primária da tabela. NÃO é o ID estável da pessoa,
@@ -269,7 +263,6 @@ sources:
           Nome da categoria está em português; usar
           category_name_translation para versão em inglês.
         columns:
-
           - name: product_id
             description: "Chave primária do produto."
             data_tests:
@@ -327,7 +320,6 @@ sources:
           Dimensão central pra análise de performance de vendedor:
           fulfillment, mix de categorias, concentração geográfica.
         columns:
-
           - name: seller_id
             description: "Chave primária do vendedor."
             data_tests:
@@ -366,7 +358,6 @@ sources:
           típica: média de lat/lng, ou centróide). 1 milhão+ de linhas
           na raw, mas só ~19k CEPs únicos.
         columns:
-
           - name: geolocation_zip_code_prefix
             description: >
               Prefixo do CEP brasileiro (5 dígitos). NÃO é chave primária
@@ -407,7 +398,6 @@ sources:
           ter resultado em coluna com nome estranho tipo
           'ï»¿product_category_name'. Verificar e renomear na staging.
         columns:
-
           - name: product_category_name
             description: "Categoria em pt-BR. PK."
             data_tests:

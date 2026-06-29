@@ -1,7 +1,7 @@
 # ============================================================================
 # olist_project - dbt_project.yml
 # Projeto de análise do dataset Olist Brazilian E-Commerce
-# Warehouse: BigQuery | Orquestração: dbt Cloud
+# Warehouse: BigQuery | Orquestração: dbt Core (CLI)
 # ============================================================================
 
 name: "olist_project"
@@ -43,8 +43,8 @@ models:
       +materialized: view
       +schema: staging
 
-    # Intermediate: view, porém ephemeral também aplica para projetos em produção
-    # cujo custo dessas tabelas seria considerável, aqui, não é.
+    # Intermediate como view: agregações baratas neste dataset.
+    # Em produção com volumes maiores valeria considerar ephemeral ou table.
     intermediate:
       +materialized: view
       +schema: intermediate

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from bigquery.funcoes_gestao_bigquery import submeter_bigquery
+from kaggle.bigquery.funcoes_gestao_bigquery import submeter_bigquery
 
 from kaggle.config.config_paths import PATH_RAW_FILES
 from kaggle.config.config_raw_tables_olist import TABLES

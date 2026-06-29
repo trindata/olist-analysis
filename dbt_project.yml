@@ -4,13 +4,13 @@
 # Warehouse: BigQuery | Orquestração: dbt Cloud
 # ============================================================================
 
-name: 'olist_project'
-version: '1.0.0'
+name: "olist_project"
+version: "1.0.0"
 config-version: 2
 
 # Profile gerenciado pelo dbt Cloud via UI (essa linha é ignorada no Cloud,
 # mas mantida pra compatibilidade caso o projeto seja rodado local no futuro).
-profile: 'default'
+profile: "default"
 
 # ----------------------------------------------------------------------------
 # Paths (defaults do dbt, sem alteração)
@@ -41,7 +41,6 @@ clean-targets:
 
 models:
   olist_project:
-
     # Staging: 1 view por tabela raw. Custo zero de storage, sempre fresca.
     staging:
       +materialized: view

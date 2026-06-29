@@ -23,6 +23,17 @@ Teste na sua máquina: [setup](SETUP.md)
 
 [Acessar no Looker Studio](https://datastudio.google.com/reporting/dfd5c732-95a3-4204-adfd-dbb5db8cac5d)
 
+### Visualizações
+
+**Overview Operacional**
+![Dashboard Operacional](assets/dashboard_overview.png)
+
+**Performance por Categoria**
+![Performance Categoria](assets/dashboard_category.png)
+
+**Análise de Vendedores**
+![Análise Vendedores](assets/dashboard_seller.png)
+
 ### Principais Insights
 
 1. **Atrasos concentrados em categorias pesadas**: 28% dos pedidos de móveis atrasam vs 12% média geral
@@ -31,21 +42,15 @@ Teste na sua máquina: [setup](SETUP.md)
 
 ---
 
-## Visualizações
-
-### Overview Operacional
-![Dashboard Operacional](assets/dashboard_operational.png)
-
-### Performance por Categoria
-![Dashboard Comercial](assets/dashboard_commercial.png)
-
----
-
 ## Roadmap
 
-- [ ] Modelo preditivo de atraso (categoria + peso + origem/destino)
+Evoluções técnicas planejadas:
+
+- [ ] Modelo preditivo de atraso usando XGBoost (features: categoria, peso, distância, seller_state)
 - [ ] Análise de cohort de retenção (% clientes que recompram por mês de primeira compra)
-- [ ] Integração com API de frete (Correios/Jadlog) para benchmark de custo real vs cobrado
+- [ ] Dashboard de anomalia: alertar quando métricas-chave saem do padrão histórico
+- [ ] Integração com API Correios para benchmark custo real vs cobrado
+- [ ] Pipeline incremental no dbt (atualizar apenas dados novos, não full refresh)
 
 ---
 

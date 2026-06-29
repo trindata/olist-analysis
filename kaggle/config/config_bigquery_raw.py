@@ -1,4 +1,4 @@
-from bigquery.modelo_bigquery import BigQueryConfig
+from kaggle.bigquery.modelo_bigquery import BigQueryConfig
 
 # =============================================================================
 # Raw tables

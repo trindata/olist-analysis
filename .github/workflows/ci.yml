@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install linters
+        run: pip install ruff
+
+      - name: Lint Python (ruff)
+        run: ruff check kaggle/
+
+      - name: Verify Python package imports
+        env:
+          GCP_PROJECT_ID: ci-placeholder
+          GCP_LOCATION: US
+          GOOGLE_CREDENTIALS: secrets/bigquery_service_account-example.json
+        run: |
+          python -c "
+          import sys; sys.path.insert(0, '.')
+          from kaggle.bigquery.modelo_bigquery import BigQueryConfig, PROJECT_ID
+          from kaggle.config.config_bigquery_raw import BQ_TABLE_MAP
+          from kaggle.config.config_raw_tables_olist import TABLES
+          assert PROJECT_ID == 'ci-placeholder'
+          assert len(BQ_TABLE_MAP) == 9
+          assert len(TABLES) == 9
+          print('All imports OK')
+          "
+
+      - name: Validate YAML files parse
+        run: |
+          python -c "
+          import yaml, sys
+          from pathlib import Path
+          failed = []
+          for p in Path('.').rglob('*.yml'):
+              if any(x in str(p) for x in ['target/', 'dbt_packages/', '.venv/']):
+                  continue
+              try:
+                  with open(p) as f:
+                      yaml.safe_load(f)
+                  print(f'OK  {p}')
+              except Exception as e:
+                  print(f'FAIL {p}: {e}')
+                  failed.append(p)
+          if failed:
+              sys.exit(1)
+          "

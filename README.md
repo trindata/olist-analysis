@@ -705,15 +705,8 @@ pip install -r requirements.txt
 
 ## Roadmap
 
-Evoluções técnicas planejadas:
-
-- [ ] CI/CD via GitHub Actions (`dbt build` + testes a cada PR)
-- [ ] Hospedagem da documentação dbt via GitHub Pages
-- [ ] Modelo preditivo de atraso usando XGBoost (features: categoria, peso, distância, seller_state)
-- [ ] Análise de cohort de retenção (% clientes que recompram por mês de primeira compra)
-- [ ] Dashboard de anomalia: alertar quando métricas-chave saem do padrão histórico
-- [ ] Integração com API Correios para benchmark custo real vs cobrado
-- [ ] Pipeline incremental no dbt (atualizar apenas dados novos, não full refresh)
+- [x] CI/CD via GitHub Actions (lint Python, validação de imports e YAMLs a cada PR)
+- [ ] Hospedagem da documentação dbt via GitHub Pages (lineage interativo + descrições por coluna)
 
 ---
 

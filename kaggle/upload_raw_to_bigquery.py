@@ -35,7 +35,7 @@ def upload_to_bigquery():
 
         # Exibe o nome do arquivo, número de linhas, colunas e os nomes das colunas
         print(f"\n{nome}: {df.shape[0]} linhas, {df.shape[1]} colunas")
-        print(f"Colunas:")
+        print("Colunas:")
         for coluna in df.columns:
             print(f" - {coluna}")
 

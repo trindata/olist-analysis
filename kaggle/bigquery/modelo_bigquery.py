@@ -10,6 +10,7 @@ load_dotenv()
 
 WriteDisposition = Literal["WRITE_TRUNCATE", "WRITE_APPEND", "WRITE_EMPTY"]
 
+PROJECT_ID = os.environ["GCP_PROJECT_ID"]
 CREDENCIAIS = Path(os.environ["GOOGLE_CREDENTIALS"])
 
 if not CREDENCIAIS.exists():
@@ -17,9 +18,9 @@ if not CREDENCIAIS.exists():
 
 @dataclass(frozen=True)
 class BigQueryConfig:
-    project_id: str
     dataset: str
     table: str
+    project_id: str = PROJECT_ID
     credentials_json_path: Path = CREDENCIAIS
     location: Optional[str] = "US"
     write_disposition: WriteDisposition = "WRITE_TRUNCATE"

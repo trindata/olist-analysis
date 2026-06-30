@@ -1,3 +1,4 @@
+![CI](https://github.com/trindata/olist-funnel-analysis/actions/workflows/ci.yml/badge.svg)
 ![dbt](https://img.shields.io/badge/dbt-FF694B?logo=dbt&logoColor=white)
 ![BigQuery](https://img.shields.io/badge/BigQuery-4285F4?logo=googlebigquery&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)

@@ -11,6 +11,9 @@ orders as (
         order_status,
         review_score,
         is_late,
+        days_to_deliver,
+        delivery_delay_days,
+        purchased_at,
         purchase_month,
         purchase_year
 
@@ -18,112 +21,101 @@ orders as (
 
 ),
 
--- ----------------------------------------------------------------------
--- 1 linha por (categoria, mês, pedido). Resolve o fan-out de items dentro
--- da mesma categoria: um pedido com 3 items na mesma categoria deve contar
--- como 1 pedido naquela categoria, não 3.
--- Métricas de pedido (review, atraso) ficam por pedido distinto.
--- Métricas de item (preço, frete, peso) somam/agregam os items do pedido
--- naquela categoria.
--- ----------------------------------------------------------------------
-category_orders as (
+seller_orders as (
 
     select
-        oi.product_category_name_en             as category,
-        o.purchase_year,
-        o.purchase_month,
+        oi.seller_id,
         o.order_id,
 
-        -- atributos do pedido (constantes dentro do grupo)
-        any_value(o.review_score)               as review_score,
-        any_value(o.is_late)                    as is_late,
+        o.order_status,
+        o.review_score,
+        o.is_late,
+        o.days_to_deliver,
+        o.delivery_delay_days,
+        o.purchased_at,
 
-        -- agregados de item dentro da categoria pro pedido
-        sum(oi.item_price)                      as order_category_revenue,
-        sum(oi.item_gross_value)                as order_category_gross_value,
-        count(oi.order_item_id)                 as items_in_category,
-        any_value(oi.seller_id)                 as any_seller_id,
+        sum(oi.item_price)              as order_seller_revenue,
+        sum(oi.item_gross_value)        as order_seller_gross_value,
 
-        -- médias por item dentro do pedido na categoria
-        avg(oi.item_price)                      as avg_item_price_in_order,
-        avg(oi.item_freight_ratio_pct)          as avg_freight_ratio_in_order,
-        avg(oi.product_weight_g)                as avg_weight_in_order
+        any_value(oi.seller_state)      as seller_state,
+        any_value(oi.seller_city)       as seller_city
 
     from order_items oi
-    inner join orders o using (order_id)
+    inner join orders o
+        using (order_id)
 
     where o.order_status = 'delivered'
 
     group by
-        oi.product_category_name_en,
-        o.purchase_year,
-        o.purchase_month,
-        o.order_id
+        oi.seller_id,
+        o.order_id,
+        o.order_status,
+        o.review_score,
+        o.is_late,
+        o.days_to_deliver,
+        o.delivery_delay_days,
+        o.purchased_at
 
 ),
 
--- ----------------------------------------------------------------------
--- Sellers ativos por (categoria, mês). Calculado separado porque a CTE
--- acima já colapsou o seller_id (any_value), então um distinct lá perderia
--- sellers múltiplos do mesmo pedido na mesma categoria.
--- ----------------------------------------------------------------------
-category_sellers as (
+seller_catalog as (
 
     select
-        oi.product_category_name_en             as category,
-        o.purchase_year,
-        o.purchase_month,
-        count(distinct oi.seller_id)            as active_sellers
+        oi.seller_id,
+        count(distinct oi.product_id)                   as unique_products,
+        count(distinct oi.product_category_name_en)     as unique_categories,
+        round(avg(oi.item_price), 2)                    as avg_item_price
 
     from order_items oi
-    inner join orders o using (order_id)
+    inner join orders o
+        using (order_id)
 
     where o.order_status = 'delivered'
 
-    group by
-        oi.product_category_name_en,
-        o.purchase_year,
-        o.purchase_month
+    group by oi.seller_id
 
 ),
 
 joined as (
 
     select
-        co.category,
-        co.purchase_year,
-        co.purchase_month,
+        so.seller_id,
+        so.seller_state,
+        so.seller_city,
 
-        -- volume
-        count(*)                                        as total_orders,
-        cs.active_sellers,
+        count(*)                                    as total_orders,
+        sc.unique_products,
+        sc.unique_categories,
 
-        -- receita
-        round(sum(co.order_category_revenue), 2)        as category_revenue,
-        round(avg(co.avg_item_price_in_order), 2)       as avg_item_price,
-        round(sum(co.order_category_gross_value), 2)    as category_gross_value,
+        round(sum(so.order_seller_revenue), 2)      as seller_revenue,
+        sc.avg_item_price,
+        round(sum(so.order_seller_gross_value), 2)  as seller_gross_value,
 
-        -- logística (médias por pedido distinto na categoria)
-        round(avg(co.avg_freight_ratio_in_order), 2)    as avg_freight_ratio_pct,
-        round(avg(co.avg_weight_in_order), 1)           as avg_product_weight_g,
+        round(avg(so.days_to_deliver), 1)           as avg_days_to_deliver,
+        round(avg(so.delivery_delay_days), 1)       as avg_delay_days,
+        countif(so.is_late)                         as late_orders,
+        round(
+            countif(so.is_late) * 100.0 / count(*)
+        , 2)                                        as pct_late_orders,
 
-        -- satisfação (média por pedido distinto)
-        round(avg(co.review_score), 2)                  as avg_review_score,
-        countif(co.review_score >= 4)                   as positive_reviews,
-        countif(co.review_score <= 2)                   as negative_reviews,
+        round(avg(so.review_score), 2)              as avg_review_score,
+        countif(so.review_score >= 4)               as positive_reviews,
+        countif(so.review_score <= 2)               as negative_reviews,
 
-        -- pontualidade (por pedido distinto)
-        countif(co.is_late)                             as late_orders
+        min(date(so.purchased_at))                  as first_sale_date,
+        max(date(so.purchased_at))                  as last_sale_date
 
-    from category_orders co
-    left join category_sellers cs
-        using (category, purchase_year, purchase_month)
+    from seller_orders so
+    left join seller_catalog sc
+        using (seller_id)
 
     group by
-        co.category,
-        co.purchase_year,
-        co.purchase_month,
-        cs.active_sellers
+        so.seller_id,
+        so.seller_state,
+        so.seller_city,
+        sc.unique_products,
+        sc.unique_categories,
+        sc.avg_item_price
 
 )
 
